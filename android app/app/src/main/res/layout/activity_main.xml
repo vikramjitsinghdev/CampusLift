@@ -1,0 +1,265 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+    This file defines the visual layout of the CampusLift home screen.
+
+    The screen allows students to:
+    1. Enter their pickup location.
+    2. Enter their destination.
+    3. Select the Plan Ride button.
+    4. Access their active ride.
+    5. Access ride reminders.
+-->
+
+<!--
+    ScrollView:
+    The main container for the screen.
+
+    It allows users to scroll vertically if the content
+    does not fit on their phone screen.
+
+    match_parent means the view takes up all available
+    width or height from its parent.
+
+    fillViewport ensures the content can fill the screen.
+
+    background sets the background color using a HEX code.
+-->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true"
+    android:background="#F7F8FA">
+
+    <!--
+        LinearLayout:
+        Organizes all the elements inside the ScrollView.
+
+        orientation="vertical" means the elements are
+        arranged from top to bottom.
+
+        wrap_content means the height adjusts to fit
+        the elements inside the layout.
+
+        padding="24dp" adds spacing around the content.
+        dp is a unit used for Android layout dimensions.
+    -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <!--
+            APP TITLE
+
+            TextView is used to display text on the screen.
+
+            textSize uses sp (scale-independent pixels),
+            which respects the user's font size settings.
+
+            textStyle="bold" makes the text bold.
+
+            textColor sets the font color.
+
+            layout_marginBottom adds spacing below the title.
+        -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="CampusLift"
+            android:textSize="30sp"
+            android:textStyle="bold"
+            android:textColor="#A51C30"
+            android:layout_marginBottom="8dp" />
+
+        <!--
+            WELCOME MESSAGE
+
+            Displays a greeting when the student opens the app.
+
+            layout_marginTop adds space above the TextView.
+        -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Welcome to CampusLift!"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:textColor="#222222"
+            android:layout_marginTop="20dp" />
+
+        <!--
+            APP DESCRIPTION
+
+            Displays a short description of CampusLift.
+
+            The gray text color makes this less prominent
+            than the main headings.
+        -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Your safer way around campus."
+            android:textSize="15sp"
+            android:textColor="#666666"
+            android:layout_marginTop="6dp"
+            android:layout_marginBottom="30dp" />
+
+        <!--
+            RIDE PLANNING SECTION
+
+            This heading introduces the part of the app
+            where students will enter their ride information.
+        -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Plan Your SafeRide"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="#222222"
+            android:layout_marginBottom="16dp" />
+
+        <!--
+            PICKUP LOCATION LABEL
+
+            Displays a label above the pickup input field.
+
+            This is a TextView because the user does not
+            need to edit this text.
+        -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Pickup Location"
+            android:textSize="15sp"
+            android:textColor="#333333" />
+
+        <!--
+            PICKUP LOCATION INPUT
+
+            EditText allows the user to enter information.
+
+            id="@+id/pickupLocation":
+            Gives this input field a unique identifier.
+
+            We can use this ID in MainActivity.kt to retrieve
+            the pickup location entered by the student.
+
+            inputType="textCapWords":
+            Suggests capitalizing the first letter of each word.
+
+            singleLine="true":
+            Keeps the input on one line.
+
+            padding adds space inside the input field.
+            marginBottom adds space outside and below it.
+        -->
+        <Spinner
+            android:id="@+id/pickupLocation"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="20dp"
+            android:padding="8dp"
+            android:backgroundTint="#A51C30" />
+
+        <!--
+            DESTINATION LABEL
+
+            Displays the label for the destination field.
+        -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Destination"
+            android:textSize="15sp"
+            android:textColor="#333333" />
+
+        <!--
+            DESTINATION INPUT
+
+            Allows the student to type their destination.
+
+            destinationLocation is the unique ID that Kotlin
+            will use to access the entered destination.
+
+            Like the pickup field, this accepts text input.
+        -->
+        <EditText
+            android:id="@+id/destinationLocation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Enter destination"
+            android:inputType="textCapWords"
+            android:singleLine="true"
+            android:padding="12dp"
+            android:layout_marginBottom="24dp" />
+
+        <!--
+            PLAN RIDE BUTTON
+
+            Button creates a clickable element.
+
+            planRideButton is its unique ID.
+        -->
+        <Button
+            android:id="@+id/planRideButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Plan Ride"
+            android:layout_marginBottom="30dp" />
+
+        <!--
+            YOUR JOURNEY SECTION
+
+            Introduces the features related to the student's
+            current ride and upcoming reminders.
+        -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Your Journey"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="#222222"
+            android:layout_marginBottom="16dp" />
+
+        <!--
+            ACTIVE RIDE BUTTON
+
+            This button will eventually open the Active Ride
+            screen.
+
+            It will display information such as:
+            - Pickup location
+            - Destination
+            - Ride status
+            - Route information
+
+        -->
+        <Button
+            android:id="@+id/activeRideButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="View Active Ride"
+            android:layout_marginBottom="12dp" />
+
+        <!--
+            RIDE REMINDERS BUTTON
+
+            This button will eventually allow students to
+            view reminders and notifications about their rides.
+
+        -->
+        <Button
+            android:id="@+id/remindersButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Ride Reminders" />
+
+    </LinearLayout>
+
+</ScrollView>
