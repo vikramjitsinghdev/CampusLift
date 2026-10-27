@@ -1,0 +1,38 @@
+[
+  {
+    "locationId": 1,
+    "name": "College Hill Road",
+    "latitude": null,
+    "longitude": null
+  },
+  {
+    "locationId": 2,
+    "name": "Head Hall",
+    "latitude": 45.94964,
+    "longitude": -66.64195
+  },
+  {
+    "locationId": 3,
+    "name": "J. Currie Center",
+    "latitude": null,
+    "longitude": null
+  },
+  {
+    "locationId": 4,
+    "name": "Student Union",
+    "latitude": null,
+    "longitude": null
+  },
+  {
+    "locationId": 5,
+    "name": "Downtown",
+    "latitude": null,
+    "longitude": null
+  },
+  {
+    "locationId": 6,
+    "name": "Regent Mall",
+    "latitude": 45.93531,
+    "longitude": -66.66455
+  }
+]

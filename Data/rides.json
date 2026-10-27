@@ -1,0 +1,10 @@
+[
+  {"rideId": 1, "driverId": 1, "pickupId": 2, "destinationId": 5, "departureTime": "16:00", "totalSeats": 4},
+  {"rideId": 2, "driverId": 1, "pickupId": 2, "destinationId": 6, "departureTime": "17:00", "totalSeats": 4},
+  {"rideId": 3, "driverId": 2, "pickupId": 4, "destinationId": 5, "departureTime": "17:00", "totalSeats": 4},
+  {"rideId": 4, "driverId": 2, "pickupId": 4, "destinationId": 1, "departureTime": "19:00", "totalSeats": 4},
+  {"rideId": 5, "driverId": 3, "pickupId": 4, "destinationId": 6, "departureTime": "18:00", "totalSeats": 4},
+  {"rideId": 6, "driverId": 3, "pickupId": 4, "destinationId": 5, "departureTime": "20:00", "totalSeats": 4},
+  {"rideId": 7, "driverId": 4, "pickupId": 3, "destinationId": 5, "departureTime": "17:00", "totalSeats": 4},
+  {"rideId": 8, "driverId": 4, "pickupId": 3, "destinationId": 1, "departureTime": "20:00", "totalSeats": 4}
+]

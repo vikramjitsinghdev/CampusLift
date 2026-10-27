@@ -1,0 +1,7 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical">
+    <com.google.android.material.appbar.MaterialToolbar android:id="@+id/toolbar" android:layout_width="match_parent" android:layout_height="?attr/actionBarSize" />
+    <ProgressBar android:id="@+id/progress" android:layout_width="32dp" android:layout_height="32dp" android:layout_gravity="center_horizontal" />
+    <TextView android:id="@+id/status" android:layout_width="match_parent" android:layout_height="wrap_content" android:padding="16dp" android:accessibilityLiveRegion="polite" />
+    <com.google.android.material.button.MaterialButton android:id="@+id/retry" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/retry" android:visibility="gone" />
+    <androidx.recyclerview.widget.RecyclerView android:id="@+id/rides" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:padding="16dp" />
+</LinearLayout>

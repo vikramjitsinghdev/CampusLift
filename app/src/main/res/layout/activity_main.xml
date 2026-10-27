@@ -1,0 +1,25 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical">
+    <com.google.android.material.appbar.MaterialToolbar android:id="@+id/toolbar"
+        android:layout_width="match_parent" android:layout_height="?attr/actionBarSize" />
+    <androidx.core.widget.NestedScrollView android:layout_width="match_parent" android:layout_height="match_parent" android:fillViewport="true">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/subtitle" android:paddingBottom="16dp" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/pickup" android:labelFor="@id/pickup" />
+            <Spinner android:id="@+id/pickup" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/destination" android:labelFor="@id/destination" />
+            <Spinner android:id="@+id/destination" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/findRide" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/find_ride" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/myRides" style="@style/Widget.MaterialComponents.Button.OutlinedButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/my_rides" />
+            <ProgressBar android:id="@+id/progress" android:layout_width="32dp" android:layout_height="32dp" android:layout_gravity="center_horizontal" />
+            <TextView android:id="@+id/status" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingVertical="8dp" android:accessibilityLiveRegion="polite" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/retry" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/retry" android:visibility="gone" />
+            <TextView android:id="@+id/routeInfo" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingVertical="12dp" android:accessibilityLiveRegion="polite" />
+            <org.osmdroid.views.MapView android:id="@+id/map" android:layout_width="match_parent" android:layout_height="240dp" android:visibility="gone" android:contentDescription="@string/route_map" />
+            <TextView android:id="@+id/attribution" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/map_attribution" android:visibility="gone" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/results" android:textAppearance="?attr/textAppearanceHeadline6" android:paddingTop="12dp" />
+            <androidx.recyclerview.widget.RecyclerView android:id="@+id/rides" android:layout_width="match_parent" android:layout_height="wrap_content" android:nestedScrollingEnabled="false" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/demo_schedule" android:paddingTop="16dp" />
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>

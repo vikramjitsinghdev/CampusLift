@@ -1,0 +1,6 @@
+[
+  {"driverId": 1, "name": "Daniel Moore", "carModel": "White Ford Windstar", "phone": "555-0101"},
+  {"driverId": 2, "name": "Sara Lee",      "carModel": "Black Ford Windstar", "phone": "555-0102"},
+  {"driverId": 3, "name": "James Park",    "carModel": "grey Toyota Corolla", "phone": "555-0103"},
+  {"driverId": 4, "name": "Amina Ali",     "carModel": "Black Ford Escort", "phone": "555-0104"}
+]

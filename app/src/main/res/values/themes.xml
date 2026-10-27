@@ -1,0 +1,8 @@
+<resources>
+    <style name="Theme.CampusLift" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/campus_red</item>
+        <item name="colorPrimaryVariant">@color/campus_red_dark</item>
+        <item name="colorSecondary">@color/campus_red</item>
+        <item name="android:fontFamily">sans</item>
+    </style>
+</resources>
