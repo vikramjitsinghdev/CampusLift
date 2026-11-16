@@ -1,6 +1,12 @@
 [
-  {"driverId": 1, "name": "Daniel Moore", "carModel": "White Ford Windstar", "phone": "555-0101"},
-  {"driverId": 2, "name": "Sara Lee",      "carModel": "Black Ford Windstar", "phone": "555-0102"},
-  {"driverId": 3, "name": "James Park",    "carModel": "grey Toyota Corolla", "phone": "555-0103"},
-  {"driverId": 4, "name": "Amina Ali",     "carModel": "Black Ford Escort", "phone": "555-0104"}
+  {"driverId":1,"name":"Daniel Moore","carModel":"White Ford Windstar","phone":"555-0101","plate":"DEMO-101"},
+  {"driverId":2,"name":"Sara Lee","carModel":"Black Ford Windstar","phone":"555-0102","plate":"DEMO-102"},
+  {"driverId":3,"name":"James Park","carModel":"grey Toyota Corolla","phone":"555-0103","plate":"DEMO-103"},
+  {"driverId":4,"name":"Amina Ali","carModel":"Black Ford Escort","phone":"555-0104","plate":"DEMO-104"},
+  {"driverId":5,"name":"Maya Chen","carModel":"Blue Honda Odyssey","phone":"555-0105","plate":"DEMO-105"},
+  {"driverId":6,"name":"Noah Brooks","carModel":"Silver Toyota Sienna","phone":"555-0106","plate":"DEMO-106"},
+  {"driverId":7,"name":"Leila Hassan","carModel":"Red Kia Carnival","phone":"555-0107","plate":"DEMO-107"},
+  {"driverId":8,"name":"Owen Fraser","carModel":"White Hyundai Santa Fe","phone":"555-0108","plate":"DEMO-108"},
+  {"driverId":9,"name":"Priya Shah","carModel":"Green Subaru Outback","phone":"555-0109","plate":"DEMO-109"},
+  {"driverId":10,"name":"Eli Martin","carModel":"Black Honda CR-V","phone":"555-0110","plate":"DEMO-1010"}
 ]

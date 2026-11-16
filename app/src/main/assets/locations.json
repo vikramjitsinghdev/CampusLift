@@ -2,8 +2,8 @@
   {
     "locationId": 1,
     "name": "College Hill Road",
-    "latitude": null,
-    "longitude": null
+    "latitude": 45.93999,
+    "longitude": -66.64728
   },
   {
     "locationId": 2,
@@ -14,20 +14,20 @@
   {
     "locationId": 3,
     "name": "J. Currie Center",
-    "latitude": null,
-    "longitude": null
+    "latitude": 45.94645,
+    "longitude": -66.63803
   },
   {
     "locationId": 4,
-    "name": "Student Union",
-    "latitude": null,
-    "longitude": null
+    "name": "Student Union Building (SUB)",
+    "latitude": 45.94521,
+    "longitude": -66.64149
   },
   {
     "locationId": 5,
-    "name": "Downtown",
-    "latitude": null,
-    "longitude": null
+    "name": "Downtown (Kings Place)",
+    "latitude": 45.96138,
+    "longitude": -66.64326
   },
   {
     "locationId": 6,

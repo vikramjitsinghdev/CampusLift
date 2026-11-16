@@ -1,47 +1,53 @@
-# CampusLift verification — 2026-10-26
+# Campus Lift verification
 
-## Actual results
+## One-phone demo update
 
-| Check | Result |
+- Debug app and test APKs built successfully.
+- 12 JVM tests passed, including demo QR expiry and booking/role checks, and simulated progress.
+- 14 Android tests passed on the API 37 emulator under a separate app ID. The tests cover the database upgrade, driver and vehicle seed data, the two check-in transitions, and moving an ended demo to ride history.
+- The Android tests exercised the booking screens and demo state transitions. Camera scanning, screenshot selection, and the moving marker were not manually checked.
+
+## Earlier calendar and ride history verification - 2026-11-16
+
+Everything under "Verified" was actually run on this date, after the calendar, Your Ride and My Rides screens were added.
+
+## Verified
+
+Environment: Windows, JDK `C:\Users\User\.jdks\jbr-21.0.11`, Gradle 8.14.3 wrapper, normal `app/build` output folder, emulator `Medium_Phone_API_37.0` started headless and read-only, `ORS_API_KEY` set in `local.properties`.
+
+| Command | Result |
 | --- | --- |
-| Gradle 8.14.3 distribution download/bootstrap | Passed |
-| Android/Kotlin plugin resolution and Gradle project configuration | Passed |
-| Standard Gradle wrapper generation | `BUILD SUCCESSFUL` (`wrapper` task only) |
-| `gradlew.bat assembleDebug` | Failed: Android SDK location not found |
-| Re-run `gradlew.bat assembleDebug testDebugUnitTest --console=plain` using generated wrapper | Same missing SDK blocker; compilation/tests did not run |
-| XML syntax, string-resource references, package declarations, runtime seed counts/IDs, original JSON preservation | Passed (`.verification/verify.py`) |
-| Actual DAO SQL: location lists, search joins, remaining seats, duplicate-count query, driver-load query, cancellation ownership, active My Rides filtering, missing ride lookup | Passed against Python's SQLite engine; this is **not** a Room runtime test |
-| Kotlin route-model compilation | Passed using installed Kotlin compiler |
-| Kotlin route-model assertion self-check | Passed: summary values, longitude/latitude order, empty routes, missing summary, invalid geometry |
-| `RouteModelsTest` JUnit suite | Added; not executed because Android Gradle test task needs SDK |
-| `DatabaseTest` Android Room/instrumentation suite | Added; not executed; needs SDK and emulator/device |
-| Full Android source compilation / Room code generation / APK | Not verified; SDK blocker occurs before compilation |
-| Live ORS request, map tiles, Android navigation, booking UI/persistence | Not runtime-tested |
-| Emulator | Not run |
+| `gradlew.bat assembleDebug` | BUILD SUCCESSFUL |
+| `gradlew.bat testDebugUnitTest` | 10 tests, 0 failures (ScheduleTimeTest 4, RouteModelsTest 4, RoutePreviewsTest 2) |
+| `gradlew.bat connectedDebugAndroidTest` | 13 tests, 0 failures (DatabaseTest 10, MigrationTest 1, RideFlowTest 2) |
+| `git check-ignore local.properties` / `git ls-files local.properties` | Ignored, not tracked |
 
-The build used the installed IntelliJ bundled JDK and a workspace-local Gradle cache. Gradle's Android analytics also reported that the user-home analytics configuration was unwritable; this was nonfatal. The fatal build error was the missing Android SDK. No SDK location was fabricated and no APK is claimed.
+What the tests cover:
 
-## Scope and preserved data
+- Available times depend on the chosen date: today hides rides that already left; tomorrow and later dates show every time; a past date shows none.
+- Booking for a chosen date; each date has its own seats; past dates and departed rides are rejected.
+- History: a booking is Active, becomes Completed 31 minutes after departure (still Active at 20 minutes), and Cancelled after cancelling. Cancelled bookings stay stored. Another student cannot open or cancel a booking.
+- Booking rules: missing ride, duplicate, full ride, four-passenger driver limit, eight students booking four seats at once.
+- Seed: 6 locations with coordinates, all nine pairs have rides, edited seed is applied, unchanged seed leaves bookings alone.
+- Booking survives closing and reopening the database. Migration from version 1 to 2 keeps a booking.
+- UI through the real controls: placeholder validation, date set to tomorrow, SUB to Regent Mall shows two times starting "Tomorrow 18:00", Book Ride, **Your Ride opens by itself**, shows "Ride confirmed", the departure, pickup and destination, Cancel Ride changes it to "Ride cancelled", My Rides tabs show "Active (0)", "Completed (0)", "Cancelled (1)" and the cancelled ride is listed.
+- Home screen in landscape.
 
-- Native Kotlin, Android XML, Room, Gson, platform HTTPS client, osmdroid, Gradle Kotlin DSL.
-- Original `Data/` Kotlin and JSON files are untouched. Runtime entities/DAO/database adapt the supplied architecture and preserve the four-passenger driver/time check.
-- Runtime JSON has six locations, four drivers, eight rides. Driver/ride assets are byte-for-byte copies. Location IDs/names are preserved; coordinates added only for sourced Head Hall and Regent Mall building positions.
-- Four coordinates still need verification: College Hill Road, J. Currie Center, Student Union, Downtown. Broad locations also need a specific meeting point chosen by the team.
-- ORS key is blank in ignored `local.properties`. Local booking is independent of routing success. A development key is embedded in the APK when configured; do not distribute a valuable unrestricted key.
-- No authentication, driver accounts, payment, dispatch, emergency integration, live fleet tracking, or navigation system.
+Manual check on the emulator (screenshots viewed):
 
-## Remaining manual verification
+- Calendar opens in the app colours, past days greyed out, picked Nov 18, field shows "Wed, Nov 18".
+- "Available times - Wed, Nov 18" list with seats.
+- Your Ride after booking with a **live OpenRouteService route**: SUB to Regent Mall, 2.9 km, 7 min, route line and both markers drawn on OpenStreetMap tiles.
+- My Rides with the booking under Active (1).
 
-1. Open this root folder in Android Studio. Install SDK Platform 35 / Build Tools 34.0.0 and let Android Studio write `sdk.dir` to `local.properties`.
-2. Add `ORS_API_KEY=...` to `local.properties`; rebuild. Use JDK 17 or 21 for Gradle.
-3. Run `assembleDebug`, `testDebugUnitTest`, then `connectedDebugAndroidTest` with an emulator.
-4. Demo Head Hall → Regent Mall (17:00): inspect ORS distance/time, road snapping, markers, tiles, and geometry. These building positions are not verified pickup entrances.
-5. Book, verify duplicate rejection, open My Rides, restart the app to verify persistence, cancel, return home to verify restored availability, then rebook.
-6. Verify empty searches, missing key, missing coordinates, and offline routing while confirming local bookings still function.
-7. Add remaining verified coordinates; clear demo app storage to re-seed after asset changes (this removes local bookings).
+## Not verified
 
-## Obsidian update
+- Live routes for the other eight pickup/destination pairs (only SUB to Regent Mall was looked at).
+- The Completed tab with a real ride on the emulator. It is covered by the database test with a fixed clock, not by waiting for a real departure.
+- Any Android version other than API 37 (accepted by the team for now). minSdk is 26.
+- Physical devices, large fonts, accessibility audit, tablets, a release build.
+- The calendar itself is tapped only in the manual check; the automated test sets the date through the ViewModel.
 
-All four CampusLift Markdown notes were read recursively before implementation. The canonical `CampusLift Current State.md` update was attempted after implementation, but **the workspace's approval settings rejected writing outside the project directory**. No Obsidian note was changed. This file records the verified implementation status until that note can be updated in a session with vault write access.
+## Notes
 
-Suggested concise memory update: native Kotlin/XML prototype and Room/JSON/booking/ORS/map code are implemented; Gradle bootstrap/configuration and local structural/SQL/route-model checks passed; Android build is blocked by an unconfigured SDK; runtime remains unverified; ORS key and four location coordinates are missing. Original `Data/` files are preserved. Next milestone is SDK setup, successful Android build/tests, then emulator demonstration.
+- Nothing was committed or pushed.

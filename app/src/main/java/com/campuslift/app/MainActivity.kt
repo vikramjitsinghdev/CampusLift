@@ -1,6 +1,7 @@
 package com.campuslift.app
 
 import android.content.Intent
+import com.campuslift.app.ui.applySystemBars
 import android.os.Bundle
 import android.view.View
 import android.widget.ArrayAdapter
@@ -17,8 +18,18 @@ import com.campuslift.app.routing.RouteError
 import com.campuslift.app.routing.RouteResult
 import com.campuslift.app.ui.HomeState
 import com.campuslift.app.ui.MainViewModel
-import com.campuslift.app.ui.MyRidesActivity
+import com.campuslift.app.routing.RoutePreviews
 import com.campuslift.app.ui.RideAdapter
+import com.campuslift.app.ui.dayText
+import com.campuslift.app.data.ScheduleTime
+import com.google.android.material.datepicker.CalendarConstraints
+import com.google.android.material.datepicker.CompositeDateValidator
+import com.google.android.material.datepicker.DateValidatorPointBackward
+import com.google.android.material.datepicker.DateValidatorPointForward
+import com.google.android.material.datepicker.MaterialDatePicker
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
 import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
@@ -29,6 +40,8 @@ import org.osmdroid.views.overlay.Polyline
 import java.io.File
 import kotlin.math.ceil
 
+private const val DATE_PICKER = "date_picker"
+
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private val model: MainViewModel by viewModels()
@@ -37,6 +50,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // A calendar restored after rotation has lost its listener, so close it.
+        (supportFragmentManager.findFragmentByTag(DATE_PICKER) as? MaterialDatePicker<*>)?.dismiss()
         Configuration.getInstance().apply {
             userAgentValue = BuildConfig.APPLICATION_ID
             osmdroidBasePath = File(cacheDir, "maps")
@@ -44,6 +59,7 @@ class MainActivity : AppCompatActivity() {
         }
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        applySystemBars(binding.root)
         binding.toolbar.setTitle(R.string.app_name)
         binding.map.setTileSource(TileSourceFactory.MAPNIK)
         binding.map.setMultiTouchControls(true)
@@ -51,10 +67,12 @@ class MainActivity : AppCompatActivity() {
         binding.rides.adapter = rides
         binding.findRide.setOnClickListener {
             val state = model.state.value
-            val pickup = state.pickups.getOrNull(binding.pickup.selectedItemPosition)
-            val destination = state.destinations.getOrNull(binding.destination.selectedItemPosition)
+            val pickup = state.pickups.getOrNull(binding.pickup.selectedItemPosition - 1)
+            val destination = state.destinations.getOrNull(binding.destination.selectedItemPosition - 1)
             if (pickup != null && destination != null) model.search(pickup, destination)
+            else Toast.makeText(this, R.string.select_locations, Toast.LENGTH_SHORT).show()
         }
+        binding.date.setOnClickListener { pickDate() }
         binding.myRides.setOnClickListener { startActivity(Intent(this, MyRidesActivity::class.java)) }
         binding.retry.setOnClickListener { model.load() }
         lifecycleScope.launch {
@@ -64,16 +82,20 @@ class MainActivity : AppCompatActivity() {
 
     private fun render(state: HomeState) {
         if (binding.pickup.adapter == null && state.pickups.isNotEmpty()) {
-            binding.pickup.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, state.pickups.map { it.name })
-            binding.destination.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, state.destinations.map { it.name })
-            state.pickupId?.let { id -> binding.pickup.setSelection(state.pickups.indexOfFirst { it.locationId == id }.coerceAtLeast(0)) }
-            state.destinationId?.let { id -> binding.destination.setSelection(state.destinations.indexOfFirst { it.locationId == id }.coerceAtLeast(0)) }
+            binding.pickup.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, listOf(getString(R.string.select_pickup)) + state.pickups.map { it.name })
+            binding.destination.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, listOf(getString(R.string.select_destination)) + state.destinations.map { it.name })
+            state.pickupId?.let { id -> binding.pickup.setSelection(state.pickups.indexOfFirst { it.locationId == id }.plus(1).coerceAtLeast(0)) }
+            state.destinationId?.let { id -> binding.destination.setSelection(state.destinations.indexOfFirst { it.locationId == id }.plus(1).coerceAtLeast(0)) }
         }
         binding.progress.visibility = if (state.loading || state.searching || state.booking || state.routing) View.VISIBLE else View.GONE
         binding.findRide.isEnabled = !state.loading && !state.failed && !state.searching && !state.booking && state.pickups.isNotEmpty()
         binding.pickup.isEnabled = !state.loading && !state.booking
         binding.destination.isEnabled = !state.loading && !state.booking
         binding.retry.visibility = if (state.failed) View.VISIBLE else View.GONE
+        binding.date.text = getString(R.string.date_button, dayText(state.date))
+        binding.date.isEnabled = !state.loading && !state.booking
+        binding.results.text = getString(R.string.results_for, dayText(state.date))
+        binding.results.visibility = if (state.searched) View.VISIBLE else View.GONE
         binding.status.setText(when {
             state.loading -> R.string.loading
             state.failed -> R.string.database_error
@@ -99,6 +121,13 @@ class MainActivity : AppCompatActivity() {
             })
             else -> ""
         }
+        val preview = if (route == null && !state.routing && state.route != null)
+            RoutePreviews.image(state.pickupId, state.destinationId) else null
+        binding.routePreview.visibility = if (preview != null) View.VISIBLE else View.GONE
+        preview?.let { binding.routePreview.setImageResource(it) }
+        if (state.route is RouteResult.Failure) {
+            binding.routeInfo.append("\n" + getString(if (preview != null) R.string.preview_fallback else R.string.preview_unavailable))
+        }
         binding.map.visibility = if (route != null) View.VISIBLE else View.GONE
         binding.attribution.visibility = binding.map.visibility
         if (route != drawnRoute) {
@@ -108,6 +137,33 @@ class MainActivity : AppCompatActivity() {
             binding.map.invalidate()
         }
         state.message?.let { Toast.makeText(this, it, Toast.LENGTH_LONG).show(); model.messageShown() }
+        // A ride was just booked: show it on its own Ride Details screen.
+        state.openBookingId?.let { startActivity(RideDetailsActivity.intent(this, it)); model.bookingOpened() }
+    }
+
+    /** Opens the calendar. Only today and the next 30 days can be chosen. */
+    private fun pickDate() {
+        if (supportFragmentManager.findFragmentByTag(DATE_PICKER) != null) return
+        fun millis(date: LocalDate) = date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+        val today = LocalDate.now()
+        val last = today.plusDays(ScheduleTime.BOOKING_DAYS_AHEAD)
+        val limits = CalendarConstraints.Builder()
+            .setStart(millis(today))
+            .setEnd(millis(last))
+            .setValidator(CompositeDateValidator.allOf(listOf<CalendarConstraints.DateValidator>(
+                DateValidatorPointForward.from(millis(today)),
+                DateValidatorPointBackward.before(millis(last)))))
+            .build()
+        val chosen = runCatching { LocalDate.parse(model.state.value.date) }.getOrDefault(today)
+        val picker = MaterialDatePicker.Builder.datePicker()
+            .setTitleText(R.string.pick_date)
+            .setSelection(millis(if (chosen.isBefore(today)) today else chosen))
+            .setCalendarConstraints(limits)
+            .build()
+        picker.addOnPositiveButtonClickListener { picked ->
+            model.setDate(Instant.ofEpochMilli(picked).atZone(ZoneOffset.UTC).toLocalDate().toString())
+        }
+        picker.show(supportFragmentManager, DATE_PICKER)
     }
 
     private fun drawRoute(route: DrivingRoute, state: HomeState) {

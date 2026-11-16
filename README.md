@@ -1,72 +1,94 @@
-# CampusLift — CS2063 Android prototype
+# Campus Lift - CS2063 Android prototype
 
-Native Kotlin/XML student app. Open **this folder** (the one containing `settings.gradle.kts`) in Android Studio. No Git setup is required. Original supplied files remain in `Data/`; only the copies under `app/` are compiled or loaded by Android.
+Campus Lift is a native Kotlin/XML app for planning a UNB SafeRide trip. Choose a pickup, destination and date, find available departures, book a seat and view your ride history. Your Ride includes student and driver check-in for a one-phone demo. Open this repository root in Android Studio. There is one Android app module (`com.campuslift.app`).
 
-## Setup
+## Build and run
 
-1. Install Android Studio with Android SDK Platform 35 and Build Tools 34.0.0. Use JDK 17 or 21 for Gradle. Android Studio's bundled JDK is suitable.
-2. Let Android Studio set `sdk.dir` in `local.properties`.
-3. Set `ORS_API_KEY=your_private_key` in that same file. Keep it local. Rebuild after changing the key. A missing key does not prevent compilation or local booking.
-4. Sync, then run on an API 26+ device/emulator with internet access for routing/maps.
+1. Install Android SDK Platform 35 and use a complete JDK 17 or 21 (one that includes `jlink`).
+2. Let Android Studio write `sdk.dir` into `local.properties`.
+3. Add `ORS_API_KEY=your_key` to `local.properties` and rebuild to get live routes.
+4. Run on API 26+.
 
 ```powershell
 .\gradlew.bat assembleDebug
 .\gradlew.bat testDebugUnitTest
-.\gradlew.bat connectedDebugAndroidTest
+.\gradlew.bat connectedDebugAndroidTest   # needs a running emulator or device
 ```
 
-The last command needs a running emulator/device. Debug APK: `app/build/outputs/apk/debug/app-debug.apk`.
+Debug APK: `app/build/outputs/apk/debug/app-debug.apk`.
+
+**API key safety.** `local.properties` is listed in `.gitignore` and is not tracked, so the key is never committed. Each teammate adds their own key. The key is compiled into debug builds only; release builds contain an empty key. A debug APK built with a key still contains it, so do not share that APK publicly.
+
+## Screens
+
+| Screen | File | What it does |
+| --- | --- | --- |
+| Home | `MainActivity` | Pickup and destination dropdowns, calendar date, **Plan Ride**, list of available times, route |
+| Your Ride | `RideDetailsActivity` | Opens right after booking. Status, date and time, driver, vehicle, route map, **Cancel Ride** |
+| My Rides | `MyRidesActivity` | Whole booking history in three tabs: **Active**, **Completed**, **Cancelled**. Tap a ride to open Your Ride |
 
 ## Demo
 
-Choose **Head Hall → Regent Mall**, then Find Ride. This supplied ride departs at 17:00 with Daniel Moore. With a valid ORS key and network, the app requests a driving route and displays distance, rounded-up minutes, route geometry, and endpoint markers on an OpenStreetMap map. Route information is shared above the results because all rides in a search have the same endpoints.
+1. Choose **Student Union Building (SUB)** and **Regent Mall**.
+2. Tap the **Date** field and pick a day in the calendar (today up to 30 days ahead; past days are greyed out).
+3. Tap **Plan Ride**. "Available times" lists every departure still open on that date with seats left.
+4. Tap **Book Ride**. The **Your Ride** screen opens with the timing, driver and the route map.
+5. Tap **My Rides** to see it under Active. Cancel it from Your Ride and it moves to Cancelled. A ride moves to Completed 30 minutes after its departure.
 
-Book the ride, open My Rides, close/reopen the app to check local persistence, then cancel. Return to the home screen and the remaining seats refresh. Rebooking after cancellation is allowed. Duplicate active bookings, exhausted seats, missing rides, and the supplied four-passenger-per-driver/time limit are checked in a Room transaction. Cancelled records remain in Room as history; My Rides shows active bookings only.
+To demo boarding on one phone, open an active booking and tap **Student: Show QR**. Take a screenshot, close the dialog, then tap **Driver: Scan student QR** and choose that screenshot with **Choose QR image**. Repeat with **Driver: Show QR** and **Student: Scan driver QR**. Both scan actions also offer a camera for a code displayed externally. After the second scan, simulated tracking runs for 30 seconds. Tap **End demo ride** when it arrives to move the booking to Completed. These demo codes expire in two minutes and the app does not authenticate either role.
 
-**Head Hall → Downtown** demonstrates the original 16:00 ride and local booking. Routing for Downtown is blocked until a precise, verified destination point is supplied.
+With an ORS key and network the route is a live OpenStreetMap map with distance and driving time. Without them the app shows the supplied route screenshot for the trip. Booking never depends on routing.
 
-Times are a repeating demo schedule, without service dates, live drivers, or real dispatch. No location/GPS permissions are requested. No accounts, payments, tracking, or emergency features are implemented.
+## Locations and schedule
 
-## Data and coordinates
+| ID | Location | Role | Latitude | Longitude | Source (OpenStreetMap) |
+| --- | --- | --- | --- | --- | --- |
+| 4 | Student Union Building (SUB) | Pickup | 45.94521 | -66.64149 | way 35143149 |
+| 3 | J. Currie Center | Pickup | 45.94645 | -66.63803 | node 12716943425 |
+| 1 | College Hill Road | Pickup | 45.93999 | -66.64728 | way 396583238 (a point on the road) |
+| 2 | Head Hall | Destination | 45.94964 | -66.64195 | way 111404729 |
+| 6 | Regent Mall | Destination | 45.93531 | -66.66455 | way 35061852 |
+| 5 | Downtown (Kings Place) | Destination | 45.96138 | -66.64326 | way 34964188 |
 
-`locations.json`, `drivers.json`, and `rides.json` seed Room once, together in a transaction. Validation checks IDs, relationships, required text, positive capacity, departure-time format, and coordinate ranges. Normal screens query Room; booking never rewrites JSON. The original assets contain six locations, four drivers, and eight rides.
+The main building of each place is the accepted pickup or drop-off spot for this prototype (team decision, 2026-11-16).
 
-Only two coordinates could be verified during implementation:
+`rides.json` has 30 departures covering all nine pickup/destination pairs. `drivers.json` has 10 demo drivers with a vehicle color and model, demo plate, and phone number. Your Ride displays these details so students can identify the vehicle. The app loads its seed from `app/src/main/assets/`.
 
-| Location | Latitude | Longitude | Source |
-| --- | --- | --- | --- |
-| Head Hall | 45.94964 | -66.64195 | [Mapcarta / OSM way 111404729](https://mapcarta.com/W111404729) |
-| Regent Mall | 45.93531 | -66.66455 | [Mapcarta / OSM way 35061852](https://mapcarta.com/W35061852) |
-
-These are mapped building positions, not verified vehicle pickup entrances. ORS may snap them to nearby roads; inspect the resulting route before the demonstration. College Hill Road, J. Currie Center, Student Union, and Downtown have explicit `null` coordinate fields in the runtime asset. Supply verified coordinates/meeting points before routing those locations. No example or random coordinates are used. Original `Data/locations.json` remains unchanged.
-
-Asset changes apply on first database initialization. For this disposable prototype, clear the application's storage/reinstall after editing seed data; this deletes demo bookings. There is no automatic destructive migration or reset button.
-
-## Responsibilities
+## How the data works
 
 ```text
-assets/*.json → validated transactional seed → Room
-Room DAO → pickup/destination lists, ride/driver joins, booking/cancellation
-MainViewModel → search state and booking → XML / RecyclerView
-Selected Room coordinates → Kotlin ORS HTTP client → typed GeoJSON response
-Route distance/time → UI; route geometry → osmdroid map
-My Rides → active Room bookings for demo student 1
+assets/*.json -> JsonSeeder (validate + hash) -> Room
+Room RideDao  -> dropdowns, available times for a date, book, cancel, booking history
+MainViewModel -> Home state (survives rotation) -> XML + RecyclerView
+Room coordinates -> OpenRouteService client -> osmdroid map (or screenshot fallback)
 ```
 
-- `data/Entities.kt`, `CarpoolDao.kt`, `AppDatabase.kt`, `JsonSeeder.kt`: local model, persistence and seed loading. Adapted from supplied Room files; originals preserved.
-- `routing/`: typed route models, validation, and HTTPS POST using Android's HTTP client; no separate backend.
-- `ui/MainViewModel.kt`: rotation-surviving home state and lifecycle-scoped operations.
-- `MainActivity.kt`, `ui/MyRidesActivity.kt`, `ui/RideAdapter.kt`: presentation/navigation.
-- XML under `res/`: screens, reusable ride card, text/theme resources.
-- Manifest: launcher, My Rides, internet/network-state permissions.
-- Gradle: Android/Kotlin/Room processing, dependencies, local key → BuildConfig.
+- **Daily schedule, dated bookings.** A ride repeats every day at its time. A booking is for one date (`serviceDate`), so seats are counted per day. See `data/ScheduleTime.kt`.
+- **Booking rules** run in one Room transaction: ride exists, that departure has not left, no duplicate booking, seats left, and at most four passengers per driver per departure.
+- **Ride states.** Cancelled bookings are kept. For a booking without a started demo, history classifies it as Completed about 30 minutes after departure. An in-progress demo stays Active until **End demo ride**.
+- **Seed changes apply automatically.** The app stores a hash of the three JSON files. When they change, the tables are updated on the next start. Bookings are kept, except bookings for rides that were removed or changed.
+- **Database version 3** stores vehicle plates and demo ride progress. Room migrations preserve existing bookings. Schemas are exported to `app/schemas/`.
+- **One demo student.** There are no accounts. Every booking belongs to `DemoStudent.ID`, defined once in `data/Entities.kt`.
 
-The ORS request follows the [official GeoJSON directions contract](https://giscience.github.io/openrouteservice/api-reference/endpoints/directions/requests-and-return-types): coordinate pairs are longitude first; distance is meters and duration seconds. The key is not committed in Kotlin, but BuildConfig embeds it into the installed APK, appropriate only for this development prototype. Do not distribute an APK with a valuable unrestricted key.
+## Differences from the proposal and Status Update 1
 
-Map tiles require network and use app-private cache storage. Attribution is visible. osmdroid 6.1.20 is a small, established prototype choice, but its upstream project is archived; revisit before production use. No separate map key is needed.
+| Planned | Built | Why |
+| --- | --- | --- |
+| Firebase | Room (local database) | Course local-storage requirement |
+| Google Maps | osmdroid + OpenStreetMap | No Maps key or billing needed. osmdroid's upstream is archived, so revisit before any real release |
+| Pickups: SUB, Sir James Dunn Hall, Head Hall/IUC | Pickups: SUB, J. Currie Center, College Hill Road | Matches the team's nine route screenshots |
+| Typed destination | Destination dropdown | Fixed destinations for this prototype; see next prototype below |
 
-## Verification
+## Next prototype
 
-`RouteModelsTest` covers typed GeoJSON parsing, coordinate order, empty routes, and malformed geometry. `DatabaseTest` contains Android Room tests for original assets, ID joins, duplicate booking, full rides, concurrent booking limits, driver limits, ownership-checked cancellation, reseeding, persistence after reopen, invalid relationships, and missing routing configuration. Their presence does not mean they have been executed; see `VERIFICATION.md` for actual results.
+- **Searchable destinations.** Let the student search for any destination instead of choosing from the fixed list (requested 2026-11-16).
+- Location permission and geofencing, notifications/reminders, and pickup map with current location.
 
-The standard Gradle 8.14.3 wrapper (`gradlew`, `gradlew.bat`, JAR and properties) was generated successfully with Gradle's `wrapper` task. The initial bootstrap used locally bundled Gradle classes; the final files are the canonical generated wrapper artifacts. Gradle wrapper code is Apache-2.0 licensed: https://github.com/gradle/gradle/blob/v8.14.3/LICENSE.
+There is no authentication, payment, dispatch or live tracking.
+
+## Tests
+
+- JVM: `RouteModelsTest`, `RoutePreviewsTest`, `ScheduleTimeTest`.
+- Emulator: `DatabaseTest` (seed, available times per date, booking rules, history states, concurrency, seed refresh, persistence), `MigrationTest` (version 1 to 2), `RideFlowTest` (date, search, book, Your Ride opens, cancel, My Rides tabs, landscape).
+
+See `VERIFICATION.md` for what was actually run and what was not.

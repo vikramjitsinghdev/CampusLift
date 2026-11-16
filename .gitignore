@@ -7,4 +7,4 @@ local.properties
 .idea/
 **/build/
 *.iml
-AGENTS.MD
+.kotlin/

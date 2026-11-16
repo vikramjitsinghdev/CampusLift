@@ -2,22 +2,39 @@ package com.campuslift.app.data
 
 import android.content.Context
 import com.google.gson.Gson
+import java.security.MessageDigest
 
-data class SeedData(val locations: List<Location>, val drivers: List<Driver>, val rides: List<Ride>)
+/** [hash] changes whenever any seed file changes; the database uses it to notice edits. */
+data class SeedData(
+    val locations: List<Location>,
+    val drivers: List<Driver>,
+    val rides: List<Ride>,
+    val hash: String = ""
+)
 
 object JsonSeeder {
+    private val files = listOf("locations.json", "drivers.json", "rides.json")
+
     fun read(context: Context): SeedData {
-        fun <T> readFile(name: String, type: Class<Array<T>>): List<T> =
-            context.assets.open(name).bufferedReader().use {
-                Gson().fromJson(it, type).toList()
-            }
+        val text = files.associateWith { name ->
+            context.assets.open(name).bufferedReader().use { it.readText() }
+        }
+        fun <T> parse(name: String, type: Class<Array<T>>): List<T> =
+            Gson().fromJson(text.getValue(name), type).toList()
         val seed = SeedData(
-            readFile("locations.json", Array<Location>::class.java),
-            readFile("drivers.json", Array<Driver>::class.java),
-            readFile("rides.json", Array<Ride>::class.java)
+            parse("locations.json", Array<Location>::class.java),
+            parse("drivers.json", Array<Driver>::class.java),
+            parse("rides.json", Array<Ride>::class.java),
+            hash(files.map { text.getValue(it) })
         )
         validate(seed)
         return seed
+    }
+
+    private fun hash(parts: List<String>): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        parts.forEach { digest.update(it.toByteArray(Charsets.UTF_8)) }
+        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
     fun validate(seed: SeedData) {
