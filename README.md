@@ -30,9 +30,9 @@ Debug APK: `app/build/outputs/apk/debug/app-debug.apk`.
 ## Demo
 
 1. Choose **Student Union Building (SUB)** and **Regent Mall**.
-2. Tap the **Date** field and pick a day in the calendar (today up to 30 days ahead; past days are greyed out).
-3. Tap **Plan Ride**. "Available times" lists every departure still open on that date with seats left.
-4. Tap **Book Ride**. The **Your Ride** screen opens with the timing, driver and the route map.
+2. Tap **Date** to select the day the shift starts. The shift runs from 15:00 to 02:00 the next morning in Halifax time.
+3. Choose a half-hour **Departure window** and tap **Plan Ride**. Unavailable windows are greyed out. The results show the actual departure time within that window.
+4. Tap **Book Ride** to review the pickup, destination, departure and driver. Confirm to open **Your Ride** with the vehicle details and route map.
 5. Tap **My Rides** to see it under Active. Cancel it from Your Ride and it moves to Cancelled. A ride moves to Completed 30 minutes after its departure.
 
 To demo boarding on one phone, open an active booking and tap **Student: Show QR**. Take a screenshot, close the dialog, then tap **Driver: Scan student QR** and choose that screenshot with **Choose QR image**. Repeat with **Driver: Show QR** and **Student: Scan driver QR**. Both scan actions also offer a camera for a code displayed externally. After the second scan, simulated tracking runs for 30 seconds. Tap **End demo ride** when it arrives to move the booking to Completed. These demo codes expire in two minutes and the app does not authenticate either role.
@@ -52,7 +52,7 @@ With an ORS key and network the route is a live OpenStreetMap map with distance 
 
 The main building of each place is the accepted pickup or drop-off spot for this prototype (team decision, 2026-11-16).
 
-`rides.json` has 30 departures covering all nine pickup/destination pairs. `drivers.json` has 10 demo drivers with a vehicle color and model, demo plate, and phone number. Your Ride displays these details so students can identify the vehicle. The app loads its seed from `app/src/main/assets/`.
+`rides.json` has 32 departures covering all nine pickup/destination pairs, including two after midnight. `drivers.json` has 10 demo drivers with a vehicle color and model, demo plate, and phone number. Your Ride displays these details so students can identify the vehicle. The app loads its seed from `app/src/main/assets/`.
 
 ## How the data works
 
@@ -63,11 +63,11 @@ MainViewModel -> Home state (survives rotation) -> XML + RecyclerView
 Room coordinates -> OpenRouteService client -> osmdroid map (or screenshot fallback)
 ```
 
-- **Daily schedule, dated bookings.** A ride repeats every day at its time. A booking is for one date (`serviceDate`), so seats are counted per day. See `data/ScheduleTime.kt`.
-- **Booking rules** run in one Room transaction: ride exists, that departure has not left, no duplicate booking, seats left, and at most four passengers per driver per departure.
+- **Daily schedule, dated bookings.** A ride repeats every day at its time in campus time (`America/Halifax`). A booking is for one date (`serviceDate`), so seats are counted per day. See `data/ScheduleTime.kt`.
+- **Booking rules** run in one Room transaction: ride exists and is active, that departure has not left, no duplicate booking, seats left, and at most four passengers per driver per departure. Cancellation is also enforced inside a Room transaction within the 30-minute post-departure active window.
 - **Ride states.** Cancelled bookings are kept. For a booking without a started demo, history classifies it as Completed about 30 minutes after departure. An in-progress demo stays Active until **End demo ride**.
-- **Seed changes apply automatically.** The app stores a hash of the three JSON files. When they change, the tables are updated on the next start. Bookings are kept, except bookings for rides that were removed or changed.
-- **Database version 3** stores vehicle plates and demo ride progress. Room migrations preserve existing bookings. Schemas are exported to `app/schemas/`.
+- **Seed changes preserve history.** The app stores a hash of the three JSON files. When they change, the schedule tables update on the next start without deleting bookings: bookings store a snapshot of their trip details, removed rides with bookings are retired from new searches, and seat reductions below existing bookings stop new sales without touching existing passengers.
+- **Database version 4** stores booking trip snapshots, ride retirement, vehicle plates, and demo ride progress. Room migrations (`1→2→3→4`) preserve existing bookings. Schemas are exported to `app/schemas/`.
 - **One demo student.** There are no accounts. Every booking belongs to `DemoStudent.ID`, defined once in `data/Entities.kt`.
 
 ## Differences from the proposal and Status Update 1
@@ -89,6 +89,6 @@ There is no authentication, payment, dispatch or live tracking.
 ## Tests
 
 - JVM: `RouteModelsTest`, `RoutePreviewsTest`, `ScheduleTimeTest`.
-- Emulator: `DatabaseTest` (seed, available times per date, booking rules, history states, concurrency, seed refresh, persistence), `MigrationTest` (version 1 to 2), `RideFlowTest` (date, search, book, Your Ride opens, cancel, My Rides tabs, landscape).
+- Emulator: `DatabaseTest` (seed, available times per date, booking rules, cancellation cutoff, history states, concurrency, seed refresh preserving history, persistence), `MigrationTest` (version 1 to 4 and version 3 to 4 + `syncSeed`), `MainViewModelTest` (stale date race, wrong-date rejection, booking/refresh isolation, error messages), `RideDetailsRouteTest` (route retry and missing-key fallback), `RideFlowTest` (date, search, book, Your Ride opens, cancel, My Rides tabs, landscape).
 
 See `VERIFICATION.md` for what was actually run and what was not.

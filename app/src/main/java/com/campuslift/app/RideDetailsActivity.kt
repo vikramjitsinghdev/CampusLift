@@ -17,11 +17,13 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.campuslift.app.data.AppDatabase
 import com.campuslift.app.data.DemoStudent
+import com.campuslift.app.data.Location
 import com.campuslift.app.data.MyBookingItem
 import com.campuslift.app.data.RideState
 import com.campuslift.app.data.ScheduleTime
 import com.campuslift.app.databinding.ActivityRideDetailsBinding
 import com.campuslift.app.routing.OpenRouteService
+import com.campuslift.app.routing.RouteError
 import com.campuslift.app.routing.RoutePreviews
 import com.campuslift.app.routing.RouteResult
 import com.campuslift.app.ui.applySystemBars
@@ -61,8 +63,12 @@ class RideDetailsActivity : AppCompatActivity() {
     private val db by lazy { AppDatabase.getInstance(this) }
     private val bookingId by lazy { intent.getIntExtra(EXTRA_BOOKING_ID, -1) }
     private var busy = false
+    private var routeLoading = false
+    private var routeLoaded = false
     private var routeJob: Job? = null
     private var booking: MyBookingItem? = null
+    private var lastShownState: RideState? = null
+    private var lastShownToday: String? = null
     private var routePoints = emptyList<GeoPoint>()
     private var demoPoints = emptyList<GeoPoint>()
     private var vehicle: Marker? = null
@@ -93,6 +99,7 @@ class RideDetailsActivity : AppCompatActivity() {
         binding.backHome.setOnClickListener { open(MainActivity::class.java) }
         binding.myRides.setOnClickListener { open(MyRidesActivity::class.java) }
         binding.retry.setOnClickListener { load() }
+        binding.retryRoute.setOnClickListener { booking?.let(::showRoute) }
         binding.cancelRide.setOnClickListener { cancel() }
         binding.showCode.setOnClickListener { showCode() }
         binding.scanCode.setOnClickListener { chooseScanner() }
@@ -102,8 +109,9 @@ class RideDetailsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 while (true) {
+                    refreshStateIfClockChanged()
                     updateTracking()
-                    delay(500)
+                    delay(if (booking?.demoStage == 2) 500L else 1000L)
                 }
             }
         }
@@ -134,19 +142,33 @@ class RideDetailsActivity : AppCompatActivity() {
         }
     }
 
+    private fun refreshStateIfClockChanged() {
+        val item = booking ?: return
+        val now = ScheduleTime.now()
+        if (now.stateOf(item) != lastShownState || now.today != lastShownToday) {
+            show(item)
+        }
+    }
+
     private fun show(item: MyBookingItem?) {
         booking = item
         binding.rideCard.visibility = if (item == null) View.GONE else View.VISIBLE
         if (item == null) {
+            lastShownState = null
+            lastShownToday = null
             binding.status.setText(R.string.booking_missing)
             binding.departure.text = ""
             return
         }
-        val state = ScheduleTime.now().stateOf(item)
+        val now = ScheduleTime.now()
+        val state = now.stateOf(item)
+        lastShownState = state
+        lastShownToday = now.today
         binding.status.setText(when (state) {
-            RideState.ACTIVE -> when (item.demoStage) {
-                1 -> R.string.demo_passenger_checked
-                2 -> R.string.demo_in_progress
+            RideState.ACTIVE -> when {
+                item.demoStage == 1 -> R.string.demo_passenger_checked
+                item.demoStage == 2 -> R.string.demo_in_progress
+                item.scheduleUnavailable -> R.string.ride_schedule_unavailable_status
                 else -> R.string.confirmed
             }
             RideState.COMPLETED -> R.string.completed_ride
@@ -156,15 +178,21 @@ class RideDetailsActivity : AppCompatActivity() {
         binding.activePickup.text = item.pickup
         binding.activeDestination.text = item.destination
         val car = item.plate?.let { getString(R.string.vehicle_with_plate, item.carModel, it) } ?: item.carModel
-        binding.details.text = getString(R.string.booking_details, item.driverName, car,
+        val baseDetails = getString(R.string.booking_details, item.driverName, car,
             item.phone, stateText(state))
-        val canCheckIn = state == RideState.ACTIVE && item.demoStage < 2
-        binding.cancelRide.visibility = if (canCheckIn) View.VISIBLE else View.GONE
-        binding.showCode.visibility = binding.cancelRide.visibility
-        binding.scanCode.visibility = binding.cancelRide.visibility
+        binding.details.text = if (state == RideState.ACTIVE && item.scheduleUnavailable) {
+            "$baseDetails\n${getString(R.string.ride_schedule_unavailable_note)}"
+        } else baseDetails
+        binding.journey.visibility = if (state == RideState.CANCELLED || item.scheduleUnavailable) View.GONE else View.VISIBLE
+        binding.journey.text = getString(R.string.ride_journey, binding.status.text)
+        val canCancel = state == RideState.ACTIVE && item.demoStage < 2
+        val canCheckIn = canCancel && !item.scheduleUnavailable
+        binding.cancelRide.visibility = if (canCancel) View.VISIBLE else View.GONE
+        binding.showCode.visibility = if (canCheckIn) View.VISIBLE else View.GONE
+        binding.scanCode.visibility = if (canCheckIn) View.VISIBLE else View.GONE
         binding.showCode.setText(if (item.demoStage == 0) R.string.demo_student_code else R.string.demo_driver_code)
         binding.scanCode.setText(if (item.demoStage == 0) R.string.demo_scan_student else R.string.demo_scan_driver)
-        if (routeJob == null) showRoute(item)   // ask for the route once, not on every return
+        if (!routeLoaded && !routeLoading) showRoute(item)   // ask once until it succeeds or user retries
         updateTracking()
     }
 
@@ -298,7 +326,12 @@ class RideDetailsActivity : AppCompatActivity() {
 
     /** Live map when OpenRouteService answers, otherwise the supplied screenshot for this trip. */
     private fun showRoute(item: MyBookingItem) {
+        if (routeLoading) return
+        routeLoading = true
+        binding.retryRoute.isEnabled = false
+        binding.retryRoute.visibility = View.GONE
         binding.routeInfo.setText(R.string.route_loading)
+        routeJob?.cancel()
         routeJob = lifecycleScope.launch {
             try {
                 val pickup = db.dao().getLocation(item.pickupId)
@@ -308,13 +341,22 @@ class RideDetailsActivity : AppCompatActivity() {
                     val lon = location.longitude
                     if (lat != null && lon != null) GeoPoint(lat, lon) else null
                 }
-                val result = if (pickup != null && destination != null) OpenRouteService().route(pickup, destination) else null
+                val result = if (pickup != null && destination != null) {
+                    routeFetcher(pickup, destination)
+                } else {
+                    RouteResult.Failure(RouteError.MISSING_COORDINATES)
+                }
                 if (result is RouteResult.Success) {
                     val route = result.route
+                    routeLoaded = true
+                    binding.retryRoute.visibility = View.GONE
+                    binding.routePreview.visibility = View.GONE
                     binding.routeInfo.text = getString(R.string.route_summary, item.pickup, item.destination,
                         route.distanceMeters / 1000, ceil(route.durationSeconds / 60).toInt())
                     val points = route.points.map { GeoPoint(it.latitude, it.longitude) }
                     routePoints = points
+                    binding.map.overlays.clear()
+                    vehicle = null
                     binding.map.overlays.add(Polyline().apply {
                         setPoints(points)
                         outlinePaint.color = getColor(R.color.route_blue)
@@ -330,13 +372,23 @@ class RideDetailsActivity : AppCompatActivity() {
                     binding.map.visibility = View.VISIBLE
                     binding.attribution.visibility = View.VISIBLE
                     binding.map.post { binding.map.zoomToBoundingBox(BoundingBox.fromGeoPoints(points), false, 32) }
-                } else fallback(item)
-            } catch (e: CancellationException) { throw e
-            } catch (_: Exception) { fallback(item) }
+                    updateTracking()
+                } else {
+                    val error = (result as? RouteResult.Failure)?.error ?: RouteError.SERVICE
+                    fallback(item, error)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                fallback(item, RouteError.SERVICE)
+            } finally {
+                routeLoading = false
+                binding.retryRoute.isEnabled = true
+            }
         }
     }
 
-    private fun fallback(item: MyBookingItem) {
+    private fun fallback(item: MyBookingItem, error: RouteError? = null) {
         if (booking?.demoStage == 2 && demoPoints.size == 2) {
             updateTracking()
             return
@@ -344,9 +396,22 @@ class RideDetailsActivity : AppCompatActivity() {
         binding.map.visibility = View.GONE
         binding.attribution.visibility = View.GONE
         val image = RoutePreviews.image(item.pickupId, item.destinationId)
-        binding.routeInfo.setText(if (image == null) R.string.preview_unavailable else R.string.preview_fallback)
+        val errorText = error?.let {
+            getString(when (it) {
+                RouteError.MISSING_KEY -> R.string.key_missing
+                RouteError.MISSING_COORDINATES -> R.string.coordinates_missing
+                RouteError.NETWORK -> R.string.network_error
+                RouteError.SERVICE -> R.string.route_error
+                RouteError.NO_ROUTE -> R.string.no_route
+                RouteError.INVALID_RESPONSE -> R.string.invalid_route
+            })
+        }
+        val fallbackText = getString(if (image == null) R.string.preview_unavailable else R.string.preview_fallback)
+        binding.routeInfo.text = if (errorText != null) "$errorText\n$fallbackText" else fallbackText
         binding.routePreview.visibility = if (image == null) View.GONE else View.VISIBLE
         image?.let { binding.routePreview.setImageResource(it) }
+        val canRetry = error != null && error != RouteError.MISSING_KEY && error != RouteError.MISSING_COORDINATES
+        binding.retryRoute.visibility = if (canRetry) View.VISIBLE else View.GONE
     }
 
     private fun cancel() {
@@ -354,13 +419,13 @@ class RideDetailsActivity : AppCompatActivity() {
         setBusy(true)
         lifecycleScope.launch {
             try {
-                val changed = db.dao().cancelBooking(bookingId, DemoStudent.ID)
+                val changed = db.dao().cancelBooking(bookingId, DemoStudent.ID, ScheduleTime.now())
                 Toast.makeText(this@RideDetailsActivity,
                     if (changed > 0) R.string.cancel_success else R.string.cancel_missing, Toast.LENGTH_SHORT).show()
                 show(db.dao().getBooking(bookingId, DemoStudent.ID))
             } catch (e: CancellationException) { throw e
             } catch (_: Exception) {
-                Toast.makeText(this@RideDetailsActivity, R.string.operation_error, Toast.LENGTH_LONG).show()
+                Toast.makeText(this@RideDetailsActivity, R.string.cancel_error, Toast.LENGTH_LONG).show()
             } finally { setBusy(false) }
         }
     }
@@ -377,6 +442,9 @@ class RideDetailsActivity : AppCompatActivity() {
 
     companion object {
         private const val EXTRA_BOOKING_ID = "bookingId"
+        internal var routeFetcher: suspend (Location, Location) -> RouteResult = { pickup, destination ->
+            OpenRouteService().route(pickup, destination)
+        }
         fun intent(context: Context, bookingId: Int): Intent =
             Intent(context, RideDetailsActivity::class.java).putExtra(EXTRA_BOOKING_ID, bookingId)
     }

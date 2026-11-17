@@ -47,7 +47,8 @@ data class Ride(
     val pickupId: Int,
     val destinationId: Int,
     val departureTime: String,   // "17:00"
-    val totalSeats: Int = 4
+    val totalSeats: Int = 4,
+    @ColumnInfo(defaultValue = "0") val retired: Boolean = false
 )
 
 /** Stored in the database as the text "confirmed" or "cancelled". */
@@ -71,7 +72,16 @@ data class Booking(
     val serviceDate: String,
     val status: BookingStatus = BookingStatus.CONFIRMED,
     @ColumnInfo(defaultValue = "0") val demoStage: Int = 0,
-    val demoStartedAt: Long? = null
+    val demoStartedAt: Long? = null,
+    @ColumnInfo(defaultValue = "0") val pickupId: Int = 0,
+    @ColumnInfo(defaultValue = "0") val destinationId: Int = 0,
+    @ColumnInfo(defaultValue = "''") val pickup: String = "",
+    @ColumnInfo(defaultValue = "''") val destination: String = "",
+    @ColumnInfo(defaultValue = "''") val driverName: String = "",
+    @ColumnInfo(defaultValue = "''") val carModel: String = "",
+    @ColumnInfo(defaultValue = "''") val phone: String = "",
+    val plate: String? = null,
+    @ColumnInfo(defaultValue = "''") val departureTime: String = ""
 )
 
 /** Remembers which version of the JSON seed files is loaded, so edits are picked up. */
@@ -90,7 +100,8 @@ data class RideListItem(
     val destination: String,
     val departureTime: String,
     val serviceDate: String,
-    val seatsLeft: Int
+    val seatsLeft: Int,
+    val plate: String? = null
 )
 
 data class MyBookingItem(
@@ -107,7 +118,8 @@ data class MyBookingItem(
     val status: BookingStatus,
     val plate: String?,
     val demoStage: Int,
-    val demoStartedAt: Long?
+    val demoStartedAt: Long?,
+    val scheduleUnavailable: Boolean = false
 )
 
 // Result of trying to book

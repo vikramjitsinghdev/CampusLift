@@ -5,7 +5,9 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
@@ -21,6 +23,7 @@ import com.campuslift.app.ui.applySystemBars
 import com.campuslift.app.ui.departureText
 import com.google.android.material.tabs.TabLayout
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -32,7 +35,9 @@ class MyRidesActivity : AppCompatActivity() {
     private val db by lazy { AppDatabase.getInstance(this) }
     private val adapter = BookingAdapter { startActivity(RideDetailsActivity.intent(this, it.bookingId)) }
     private val tabs = listOf(RideState.ACTIVE, RideState.COMPLETED, RideState.CANCELLED)
+    private var allBookings: List<MyBookingItem> = emptyList()
     private var rides: Map<RideState, List<MyBookingItem>> = emptyMap()
+    private var lastToday: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,6 +58,14 @@ class MyRidesActivity : AppCompatActivity() {
             override fun onTabUnselected(tab: TabLayout.Tab) = Unit
             override fun onTabReselected(tab: TabLayout.Tab) = Unit
         })
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (true) {
+                    delay(1000L)
+                    if (allBookings.isNotEmpty()) refreshBuckets()
+                }
+            }
+        }
     }
 
     // Reload on every return, because a ride may have been cancelled on the details screen.
@@ -64,15 +77,29 @@ class MyRidesActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 db.syncSeed(applicationContext)
-                val time = ScheduleTime.now()
-                rides = tabs.associateWith { db.dao().bookingsIn(it, DemoStudent.ID, time) }
-                showSelectedTab()
+                allBookings = db.dao().allBookings(DemoStudent.ID)
+                refreshBuckets()
             } catch (e: CancellationException) { throw e
             } catch (_: Exception) {
                 binding.status.visibility = View.VISIBLE
                 binding.status.setText(R.string.database_error)
                 binding.retry.visibility = View.VISIBLE
             } finally { binding.progress.visibility = View.GONE }
+        }
+    }
+
+    private fun refreshBuckets() {
+        val now = ScheduleTime.now()
+        val updated = tabs.associateWith { state ->
+            val matching = allBookings.filter { now.stateOf(it) == state }
+            if (state == RideState.ACTIVE) matching.reversed() else matching
+        }
+        val todayChanged = lastToday != null && lastToday != now.today
+        if (updated != rides || lastToday != now.today) {
+            rides = updated
+            lastToday = now.today
+            showSelectedTab()
+            if (todayChanged) adapter.notifyItemRangeChanged(0, adapter.itemCount)
         }
     }
 
@@ -83,7 +110,7 @@ class MyRidesActivity : AppCompatActivity() {
         }
         val state = tabs[binding.tabs.selectedTabPosition.coerceAtLeast(0)]
         val items = rides[state].orEmpty()
-        adapter.submitList(items)
+        adapter.submit(items, state)
         binding.status.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
         binding.status.setText(when (state) {
             RideState.ACTIVE -> R.string.no_bookings
@@ -109,6 +136,13 @@ class MyRidesActivity : AppCompatActivity() {
 private class BookingAdapter(private val open: (MyBookingItem) -> Unit) :
     ListAdapter<MyBookingItem, BookingAdapter.Holder>(Diff) {
 
+    private var shownState: RideState = RideState.ACTIVE
+
+    fun submit(items: List<MyBookingItem>, state: RideState) {
+        shownState = state
+        submitList(items)
+    }
+
     class Holder(val binding: ItemRideBinding) : RecyclerView.ViewHolder(binding.root)
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
@@ -118,7 +152,12 @@ private class BookingAdapter(private val open: (MyBookingItem) -> Unit) :
         val ride = getItem(position)
         with(holder.binding) {
             val context = root.context
-            details.text = context.getString(R.string.booking_card,
+            val textRes = if (shownState == RideState.ACTIVE && ride.scheduleUnavailable) {
+                R.string.booking_card_unavailable
+            } else {
+                R.string.booking_card
+            }
+            details.text = context.getString(textRes,
                 context.departureText(ride.serviceDate, ride.departureTime),
                 ride.pickup, ride.destination, ride.driverName, ride.carModel)
             action.setText(R.string.view_ride)

@@ -43,7 +43,7 @@ class DatabaseTest {
     @Test fun seedSearchDuplicateCancellationAndRebook() = runBlocking {
         val dao = db.dao()
         assertEquals(6, dao.locationCount())
-        assertEquals(30, dao.getAllRides().size)
+        assertEquals(32, dao.getAllRides().size)
         assertEquals(10, dao.getAllRides().map { it.driverId }.distinct().size)
         val found = dao.availableRides(4, 6, today, afternoon)
         assertEquals(listOf(2, 12), found.map { it.rideId })
@@ -66,8 +66,8 @@ class DatabaseTest {
         assertEquals("DEMO-101", booking.plate)
         assertEquals(booking.bookingId, dao.confirmedBookingId(2, student, today))
 
-        assertEquals(0, dao.cancelBooking(booking.bookingId, 2))   // another student cannot cancel it
-        assertEquals(1, dao.cancelBooking(booking.bookingId, student))
+        assertEquals(0, dao.cancelBooking(booking.bookingId, 2, afternoon))   // another student cannot cancel it
+        assertEquals(1, dao.cancelBooking(booking.bookingId, student, afternoon))
         assertTrue(dao.activeBookings(student, afternoon).isEmpty())
         assertEquals(4, dao.seatsLeft(2, today))
         assertEquals(BookResult.SUCCESS, dao.bookRide(2, student, today, afternoon))
@@ -91,13 +91,25 @@ class DatabaseTest {
         assertEquals(3, dao.availableRides(4, 6, "2026-11-25", evening).first().seatsLeft)
     }
 
+    @Test fun overnightDepartureBelongsToPreviousShiftButBooksActualDate() = runBlocking {
+        val dao = db.dao()
+        val before = ScheduleTime.of(LocalDateTime.of(2026, 11, 17, 0, 5))
+        val ride = dao.shiftRides(4, 5, today, before).single()
+        assertEquals("00:15", ride.departureTime)
+        assertEquals(tomorrow, ride.serviceDate)
+        assertEquals(BookResult.SUCCESS, dao.bookRide(ride.rideId, student, ride.serviceDate, before))
+        assertEquals(3, dao.shiftRides(4, 5, today, before).single().seatsLeft)
+        val after = ScheduleTime.of(LocalDateTime.of(2026, 11, 17, 0, 15))
+        assertTrue(dao.shiftRides(4, 5, today, after).isEmpty())
+    }
+
     @Test fun historyIsSplitIntoActiveCompletedAndCancelled() = runBlocking {
         val dao = db.dao()
         dao.bookRide(2, student, today, afternoon)      // 18:00 today, will be completed
         dao.bookRide(12, student, today, afternoon)     // 23:00 today, will be cancelled
         dao.bookRide(1, student, tomorrow, afternoon)   // 16:00 tomorrow, stays active
         val cancelled = dao.confirmedBookingId(12, student, today)!!
-        dao.cancelBooking(cancelled, student)
+        dao.cancelBooking(cancelled, student, afternoon)
 
         // 20 minutes after leaving, the 18:00 ride still counts as active.
         assertEquals(listOf(today, tomorrow), dao.bookingsIn(RideState.ACTIVE, student, evening).map { it.serviceDate })
@@ -122,7 +134,7 @@ class DatabaseTest {
         assertEquals(0, dao.advanceDemo(id, student, 0, 1000))
         assertEquals(1, dao.advanceDemo(id, student, 1, 2000))
         assertEquals(2000L, dao.getBooking(id, student)?.demoStartedAt)
-        assertEquals(0, dao.cancelBooking(id, student))
+        assertEquals(0, dao.cancelBooking(id, student, afternoon))
         assertEquals(1, dao.advanceDemo(id, student, 2, 32_000))
         assertEquals(id, dao.bookingsIn(RideState.COMPLETED, student, afternoon).single().bookingId)
     }
@@ -140,31 +152,94 @@ class DatabaseTest {
         assertEquals(BookResult.DRIVER_FULL, db.dao().bookRide(99, 5, today, afternoon))
     }
 
-    @Test fun editedSeedIsAppliedAndOnlyAffectedBookingsAreRemoved() = runBlocking {
+    @Test fun cancellationRespectsThirtyMinuteCutoffAndMidnight() = runBlocking {
         val dao = db.dao()
-        dao.bookRide(1, student, today, afternoon)   // unchanged ride
-        dao.bookRide(2, student, today, afternoon)   // ride that will change
-        dao.bookRide(5, student, today, afternoon)   // ride that will be removed
+        dao.bookRide(2, student, today, afternoon) // 18:00
+        val ride2Booking = dao.confirmedBookingId(2, student, today)!!
+        // Exactly 30 minutes after departure is still inside the active window.
+        val exactCutoff = ScheduleTime.of(LocalDateTime.of(2026, 11, 16, 18, 30))
+        assertEquals(1, dao.cancelBooking(ride2Booking, student, exactCutoff))
+
+        // 31 minutes after departure, cancellation is rejected even if the screen was stale.
+        dao.bookRide(1, student, today, afternoon) // 16:00
+        val ride1Booking = dao.confirmedBookingId(1, student, today)!!
+        val pastCutoff = ScheduleTime.of(LocalDateTime.of(2026, 11, 16, 16, 31))
+        assertEquals(0, dao.cancelBooking(ride1Booking, student, pastCutoff))
+        assertEquals(BookingStatus.CONFIRMED, dao.getBooking(ride1Booking, student)?.status)
+        assertEquals(ride1Booking, dao.bookingsIn(RideState.COMPLETED, student, pastCutoff).single().bookingId)
+
+        // Across midnight: 23:40 departure remains cancellable at 00:10, rejected at 00:11.
+        dao.upsertRides(listOf(Ride(100, 1, 4, 5, "23:40", 4)))
+        dao.bookRide(100, student, today, afternoon)
+        val lateBooking = dao.confirmedBookingId(100, student, today)!!
+        val beforeMidnightCutoff = ScheduleTime.of(LocalDateTime.of(2026, 11, 17, 0, 10))
+        val afterMidnightCutoff = ScheduleTime.of(LocalDateTime.of(2026, 11, 17, 0, 11))
+        assertEquals(0, dao.cancelBooking(lateBooking, student, afterMidnightCutoff))
+        assertEquals(1, dao.cancelBooking(lateBooking, student, beforeMidnightCutoff))
+    }
+
+    @Test fun editedSeedPreservesBookingHistoryAndRetiresRemovedRides() = runBlocking {
+        val dao = db.dao()
+        // Future bookings on ride 1 (two students, seats will shrink to 1), ride 2 (time will change),
+        // ride 5 (will be removed from seed), plus completed and cancelled history on ride 5.
+        dao.bookRide(1, student, tomorrow, afternoon)
+        dao.bookRide(1, 2, tomorrow, afternoon)
+        dao.bookRide(2, student, tomorrow, afternoon)
+        dao.bookRide(5, student, tomorrow, afternoon)
+        dao.bookRide(5, student, today, afternoon) // completed at night (19:00 -> completed at 19:31)
+        dao.bookRide(6, student, tomorrow, afternoon)
+        val cancelledId = dao.confirmedBookingId(6, student, tomorrow)!!
+        dao.cancelBooking(cancelledId, student, afternoon)
 
         val seed = JsonSeeder.read(context)
         val edited = seed.copy(
             locations = seed.locations.map { if (it.locationId == 6) it.copy(name = "Regent Mall (main doors)") else it },
-            rides = seed.rides.filter { it.rideId != 5 }
-                .map { if (it.rideId == 2) it.copy(departureTime = "18:15") else it },
+            drivers = seed.drivers.map { if (it.driverId == 1) it.copy(name = "Edited Driver", carModel = "Edited Van") else it },
+            rides = seed.rides.filter { it.rideId != 5 }.map {
+                when (it.rideId) {
+                    1 -> it.copy(totalSeats = 1)
+                    2 -> it.copy(departureTime = "18:15")
+                    else -> it
+                }
+            },
             hash = "edited"
         )
         dao.applySeed(edited)
 
         assertEquals("edited", dao.seedHash())
-        assertNull(dao.getRide(5))
+        assertTrue(dao.getRide(5)?.retired == true)
         assertEquals("18:15", dao.getRide(2)?.departureTime)
         assertEquals("Regent Mall (main doors)", dao.getLocation(6)?.name)
-        val kept = dao.activeBookings(student, afternoon).single()   // only the ride 1 booking is left
-        assertEquals(5, kept.destinationId)
 
-        db.syncSeed(context)   // the real assets differ from "edited", so they are loaded again
+        // All 5 of student's bookings survive with their original snapshot details.
+        val all = dao.allBookings(student)
+        assertEquals(5, all.size)
+        val ride2Booking = all.first { it.departureTime == "18:00" }
+        assertEquals("Daniel Moore", ride2Booking.driverName)
+        assertEquals("Regent Mall", ride2Booking.destination)
+        assertTrue(ride2Booking.scheduleUnavailable)
+
+        val ride5Future = all.first { it.departureTime == "19:00" && it.serviceDate == tomorrow }
+        assertEquals("Regent Mall", ride5Future.destination)
+        assertTrue(ride5Future.scheduleUnavailable)
+
+        val ride1Booking = all.first { it.departureTime == "16:00" }
+        assertEquals("Daniel Moore", ride1Booking.driverName)
+        assertFalse(ride1Booking.scheduleUnavailable)
+
+        // Retired ride 5 cannot be searched or booked.
+        assertFalse(dao.availableRides(3, 6, tomorrow, afternoon).any { it.rideId == 5 })
+        assertEquals(BookResult.NOT_FOUND, dao.bookRide(5, 3, tomorrow, afternoon))
+
+        // Ride 1 seat reduction below existing 2 bookings stops new sales without deleting existing ones.
+        val ride1Card = dao.availableRides(4, 5, tomorrow, afternoon).first { it.rideId == 1 }
+        assertEquals(0, ride1Card.seatsLeft)
+        assertEquals(BookResult.RIDE_FULL, dao.bookRide(1, 3, tomorrow, afternoon))
+
+        // Restoring the original seed makes ride 5 active again.
+        db.syncSeed(context)
         assertEquals(seed.hash, dao.seedHash())
-        assertNotNull(dao.getRide(5))
+        assertFalse(dao.getRide(5)!!.retired)
         assertEquals("18:00", dao.getRide(2)?.departureTime)
     }
 

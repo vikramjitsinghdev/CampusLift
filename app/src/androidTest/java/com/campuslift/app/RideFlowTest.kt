@@ -1,10 +1,17 @@
 package com.campuslift.app
 
 import android.app.Activity
+import android.app.Instrumentation
+import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import android.graphics.Bitmap
+import android.graphics.Rect
+import android.net.Uri
 import android.os.SystemClock
 import android.view.View
+import android.view.MotionEvent
+import android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK
 import android.widget.Spinner
 import android.widget.TextView
 import androidx.lifecycle.ViewModelProvider
@@ -22,6 +29,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
 
 private const val SUB = "Student Union Building (SUB)"
 private const val MALL = "Regent Mall"
@@ -51,11 +59,14 @@ class RideFlowTest {
                     ViewModelProvider(it)[MainViewModel::class.java].setDate(tomorrow)
                     planRide(it)
                 }
+                chooseTimeAndPlan(home)
                 await(home) {
                     it.findViewById<TextView>(R.id.details)?.text?.startsWith("Tomorrow 18:00") == true &&
-                        it.findViewById<RecyclerView>(R.id.rides).adapter?.itemCount == 2 && routeShown(it)
+                        it.findViewById<RecyclerView>(R.id.rides).adapter?.itemCount == 1 && routeShown(it)
                 }
                 home.onActivity { it.findViewById<View>(R.id.action).performClick() }
+                assertTrue(db.dao().allBookings(DemoStudent.ID).isEmpty())
+                tapText(context.getString(R.string.confirm_booking))
 
                 val details = monitor.waitForActivityWithTimeout(15000)
                 assertNotNull("Ride Details should open after booking", details)
@@ -106,7 +117,61 @@ class RideFlowTest {
                 ViewModelProvider(it)[MainViewModel::class.java].setDate(tomorrow)
                 planRide(it)
             }
+            await(home) { it.findViewById<View>(R.id.timeSlot).isEnabled }
+            home.onActivity { ViewModelProvider(it)[MainViewModel::class.java].selectSlot(6) }
+            await(home) { it.findViewById<View>(R.id.findRide).isEnabled }
+            home.onActivity { it.findViewById<View>(R.id.findRide).performClick() }
             await(home) { (it.findViewById<View>(R.id.action)?.height ?: 0) > 0 }
+        }
+    }
+
+    @Test fun bookCheckInFromScreenshotsAndFinishDemo() = runBlocking {
+        db.syncSeed(context)
+        val dao = db.dao()
+        dao.clearAllBookings()
+        val now = ScheduleTime.now()
+        assertEquals(com.campuslift.app.data.BookResult.SUCCESS, dao.bookRide(2, DemoStudent.ID, now.tomorrow, now))
+        val id = dao.confirmedBookingId(2, DemoStudent.ID, now.tomorrow)!!
+        val image = File(context.cacheDir, "ride-qr-test.png")
+        val imagePicker = object : Instrumentation.ActivityMonitor() {
+            override fun onStartActivity(intent: Intent): Instrumentation.ActivityResult? =
+                if (intent.action == Intent.ACTION_GET_CONTENT && intent.type == "image/*") {
+                    Instrumentation.ActivityResult(Activity.RESULT_OK, Intent().setData(Uri.fromFile(image)))
+                } else null
+        }
+        instrumentation.addMonitor(imagePicker)
+        try {
+            ActivityScenario.launch<RideDetailsActivity>(RideDetailsActivity.intent(context, id)).use { details ->
+                await(details) { it.findViewById<View>(R.id.showCode).visibility == View.VISIBLE }
+                for (status in listOf(R.string.demo_passenger_checked, R.string.demo_in_progress)) {
+                    details.onActivity { it.findViewById<View>(R.id.showCode).performClick() }
+                    findText(context.getString(R.string.demo_qr_help))
+                    instrumentation.waitForIdleSync()
+                    val screenshot = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+                    image.outputStream().use { assertTrue(screenshot.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+                    tapText(context.getString(android.R.string.ok))
+                    details.onActivity { it.findViewById<View>(R.id.scanCode).performClick() }
+                    tapText(context.getString(R.string.demo_image))
+                    await(details) { it.findViewById<TextView>(R.id.status).text == context.getString(status) }
+                }
+                await(details) { it.findViewById<View>(R.id.demoProgress).visibility == View.VISIBLE }
+                val deadline = SystemClock.elapsedRealtime() + 35_000L
+                var ended = false
+                while (!ended && SystemClock.elapsedRealtime() < deadline) {
+                    details.onActivity {
+                        val end = it.findViewById<View>(R.id.endRide)
+                        if (end.isEnabled) ended = end.performClick()
+                    }
+                    if (!ended) SystemClock.sleep(250)
+                }
+                assertTrue("The simulated vehicle should reach the destination", ended)
+                await(details) { it.findViewById<TextView>(R.id.status).text == context.getString(R.string.completed_ride) }
+            }
+            assertTrue(dao.bookingsIn(RideState.COMPLETED, DemoStudent.ID, ScheduleTime.now()).any { it.bookingId == id })
+        } finally {
+            instrumentation.removeMonitor(imagePicker)
+            image.delete()
+            dao.clearAllBookings() // This screen test runs in the isolated emulator app.
         }
     }
 
@@ -115,7 +180,42 @@ class RideFlowTest {
         val destination = activity.findViewById<Spinner>(R.id.destination)
         pickup.setSelection((0 until pickup.count).first { pickup.getItemAtPosition(it) == SUB })
         destination.setSelection((0 until destination.count).first { destination.getItemAtPosition(it) == MALL })
-        activity.findViewById<View>(R.id.findRide).performClick()
+    }
+
+    private fun chooseTimeAndPlan(home: ActivityScenario<MainActivity>) {
+        await(home) { it.findViewById<View>(R.id.timeSlot).isEnabled }
+        home.onActivity { it.findViewById<View>(R.id.timeSlot).performClick() }
+        val unavailable = findText("15:00–15:30 · Unavailable")
+        assertFalse(unavailable.isEnabled)
+        val bounds = Rect()
+        findText("18:00–18:30").getBoundsInScreen(bounds)
+        val pressedAt = SystemClock.uptimeMillis()
+        for (action in listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP)) {
+            val event = MotionEvent.obtain(pressedAt, SystemClock.uptimeMillis(), action,
+                bounds.exactCenterX(), bounds.exactCenterY(), 0)
+            instrumentation.sendPointerSync(event)
+            event.recycle()
+        }
+        await(home) { it.findViewById<View>(R.id.findRide).isEnabled }
+        home.onActivity { it.findViewById<View>(R.id.findRide).performClick() }
+    }
+
+    private fun findText(text: String): android.view.accessibility.AccessibilityNodeInfo {
+        val deadline = SystemClock.elapsedRealtime() + 5000
+        do {
+            val nodes = instrumentation.uiAutomation.rootInActiveWindow?.findAccessibilityNodeInfosByText(text)
+            nodes?.firstOrNull {
+                it.packageName?.toString() == context.packageName &&
+                    it.text?.toString()?.equals(text, ignoreCase = true) == true
+            }?.let { return it }
+            SystemClock.sleep(100)
+        } while (SystemClock.elapsedRealtime() < deadline)
+        error("Could not find $text")
+    }
+
+    private fun tapText(text: String) {
+        val node = findText(text)
+        assertTrue(node.performAction(ACTION_CLICK) || node.parent?.performAction(ACTION_CLICK) == true)
     }
 
     /** With an ORS key and network the live map is shown; otherwise the supplied screenshot. */

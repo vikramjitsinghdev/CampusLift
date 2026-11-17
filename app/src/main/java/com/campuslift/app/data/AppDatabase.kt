@@ -12,7 +12,7 @@ import kotlinx.coroutines.withContext
 
 @Database(
     entities = [Location::class, Driver::class, Ride::class, Booking::class, SeedInfo::class],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -49,10 +49,37 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE rides ADD COLUMN retired INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE bookings ADD COLUMN pickupId INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE bookings ADD COLUMN destinationId INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE bookings ADD COLUMN pickup TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE bookings ADD COLUMN destination TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE bookings ADD COLUMN driverName TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE bookings ADD COLUMN carModel TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE bookings ADD COLUMN phone TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE bookings ADD COLUMN plate TEXT")
+                db.execSQL("ALTER TABLE bookings ADD COLUMN departureTime TEXT NOT NULL DEFAULT ''")
+                db.execSQL("""
+                    UPDATE bookings SET
+                        pickupId = COALESCE((SELECT r.pickupId FROM rides r WHERE r.rideId = bookings.rideId), 0),
+                        destinationId = COALESCE((SELECT r.destinationId FROM rides r WHERE r.rideId = bookings.rideId), 0),
+                        pickup = COALESCE((SELECT p.name FROM rides r JOIN locations p ON p.locationId = r.pickupId WHERE r.rideId = bookings.rideId), ''),
+                        destination = COALESCE((SELECT dest.name FROM rides r JOIN locations dest ON dest.locationId = r.destinationId WHERE r.rideId = bookings.rideId), ''),
+                        driverName = COALESCE((SELECT d.name FROM rides r JOIN drivers d ON d.driverId = r.driverId WHERE r.rideId = bookings.rideId), ''),
+                        carModel = COALESCE((SELECT d.carModel FROM rides r JOIN drivers d ON d.driverId = r.driverId WHERE r.rideId = bookings.rideId), ''),
+                        phone = COALESCE((SELECT d.phone FROM rides r JOIN drivers d ON d.driverId = r.driverId WHERE r.rideId = bookings.rideId), ''),
+                        plate = (SELECT d.plate FROM rides r JOIN drivers d ON d.driverId = r.driverId WHERE r.rideId = bookings.rideId),
+                        departureTime = COALESCE((SELECT r.departureTime FROM rides r WHERE r.rideId = bookings.rideId), '')
+                """.trimIndent())
+            }
+        }
+
         @Volatile private var instance: AppDatabase? = null
         fun getInstance(context: Context): AppDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "campuslift.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build().also { instance = it }
         }
     }

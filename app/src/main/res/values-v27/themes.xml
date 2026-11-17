@@ -1,0 +1,5 @@
+<resources>
+    <style name="Theme.CampusLift" parent="Base.Theme.CampusLift">
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>
